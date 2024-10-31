@@ -2,8 +2,8 @@ import noble from '@abandonware/noble';
 import spinner from 'cli-spinner';
 import { Command } from 'commander';
 import floydSteinberg from 'floyd-steinberg';
-import { createReadStream, createWriteStream } from 'fs';
-import * as path from 'path';
+import { existsSync, mkdirSync, createReadStream, createWriteStream } from 'fs';
+import * as Path from 'path';
 import { select, confirm } from '@inquirer/prompts';
 import Jimp from "jimp";
 import { PNG } from 'pngjs';
@@ -12,7 +12,7 @@ const { Spinner } = spinner;
 
 //
 // !!!!! NOTE!!!!!!
-// 
+//
 // You need to change BYTES_PER_LINE to match the size of your printer's output.
 //
 // Tbh I'm not sure what's the right way to calcuate this properly; I just guessed & checked until
@@ -23,8 +23,21 @@ const IMAGE_WIDTH = BYTES_PER_LINE * 8;
 
 const SCAN_AGAIN_SELECTION = "__scan_again__";
 const QUIT_SELECTION = "__quit__";
-
 let discoveredDevices = {};
+
+const CACHE_DIR = 'res/cache/';
+const TEMP_DIR = 'res/temp/';
+
+//
+// setup
+//
+
+if (!existsSync(CACHE_DIR)) {
+  mkdirSync(CACHE_DIR);
+}
+if (!existsSync(TEMP_DIR)) {
+  mkdirSync(TEMP_DIR);
+}
 
 //
 // main
@@ -32,13 +45,13 @@ let discoveredDevices = {};
 
 const program = new Command();
 program
-  .option('-f, --file <path>', 'path for image to print', './burger.png')
+  .option('-f, --file <path>', 'path for image to print', './res/cache/burger.png')
   .option('-s, --scale <size>', 'percent scale at which the image should print (1-100)', 100);
 program.parse(process.argv);
 const { file, scale } = program.opts()
 
-const printableImgPath = await makeDitheredImage(file, scale);
-const characteristic = await getDeviceCharacteristicMenu(printableImgPath);
+const printableImgPath = await makeTempImage(file, scale);
+const characteristic = await getDeviceCharacteristicMenu();
 const data = await getPrintDataFromPort(printableImgPath);
 characteristic.write(Buffer.from(data), true);
 
@@ -50,7 +63,7 @@ function delay(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-async function getDeviceCharacteristicMenu(printableImgPath) {
+async function getDeviceCharacteristicMenu() {
   let scanDurationInMs = 5000;
   do {
     await scanDevices(scanDurationInMs);
@@ -132,7 +145,7 @@ async function selectDevice() {
 async function getWritableCharacteristic(peripheral) {
   await peripheral.connectAsync();
   const { characteristics } = await peripheral.discoverAllServicesAndCharacteristicsAsync();
-  const [characteristic] = characteristics.filter(characteristic => { 
+  const [characteristic] = characteristics.filter(characteristic => {
     return characteristic.properties.includes('write');
   })
   return characteristic;
@@ -158,16 +171,16 @@ async function getPrintDataFromPort(printableImgPath) {
   printData[index++] = 64;
 
   // Select justification
-  printData[index++] = 27; 
-  printData[index++] = 97; 
+  printData[index++] = 27;
+  printData[index++] = 97;
 
   // Justify (0=left, 1=center, 2=right)
-  printData[index++] = 0; 
+  printData[index++] = 0;
 
   // End of header
-  printData[index++] = 31; 
-  printData[index++] = 17; 
-  printData[index++] = 2; 
+  printData[index++] = 31;
+  printData[index++] = 17;
+  printData[index++] = 2;
   printData[index++] = 4;
   // ********
 
@@ -178,7 +191,7 @@ async function getPrintDataFromPort(printableImgPath) {
     if (lines > 256) {
       lines = 256;
     }
-  
+
     // ********
     // FROM https://github.com/vivier/phomemo-tools/tree/master#32-block-marker
     // PRINTING MARKER
@@ -194,7 +207,7 @@ async function getPrintDataFromPort(printableImgPath) {
     // Bytes per line
     printData[index++] = BYTES_PER_LINE
     printData[index++] = 0
-  
+
     // Number of lines to print in this block.
     printData[index++] = lines - 1;
     printData[index++] = 0
@@ -263,38 +276,37 @@ async function getPrintDataFromPort(printableImgPath) {
   return printData;
 }
 
-async function makeDitheredImage(imgPath, scale) {
-  let originalFileName = path.basename('path');
+async function makeTempImage(imgPath, scale) {
+  let originalFileName = Path.basename('path');
   if (!originalFileName) {
     throw new Error();
   }
   let pic = await Jimp.read(imgPath);
-  const scalePercentage = Math.max(scale / 100.0, 0.01); 
+  const scalePercentage = Math.max(scale / 100.0, 0.01);
   const scaledWidth = Math.floor(scalePercentage * IMAGE_WIDTH);
 
   // Scale the given image to the desired size.
-  const resizedImgPath = `${imgPath}--resized.png`;
+  const tempPath = imgPath.replace(CACHE_DIR, TEMP_DIR);
   pic = pic.resize(scaledWidth, Jimp.AUTO)
 
   // Scale a transparent background to the width expected by the printer, and the height
   // of the scaled image.
-  let transparentBackground = await Jimp.read('./transparent-square.png');
+  let transparentBackground = await Jimp.read('./res/transparent-square.png');
   transparentBackground = transparentBackground.resize(IMAGE_WIDTH, pic.bitmap.height);
   const x = IMAGE_WIDTH - pic.bitmap.width;
-  const composedPic = transparentBackground.composite(pic, x, 0);  
+  const composedPic = transparentBackground.composite(pic, x, 0);
 
-  await composedPic.writeAsync(resizedImgPath);
+  await composedPic.writeAsync(tempPath);
 
   // TODO: Swap out dithering library for something that works better with B&W images.
-  return convertToDithered(resizedImgPath);
+  return convertToDithered(tempPath);
 }
 
-async function convertToDithered(resizedImgPath) {
-  const ditheredImgPath = `${resizedImgPath}--dithered.png`;
+async function convertToDithered(path) {
   return new Promise((resolve) => {
-    createReadStream(resizedImgPath).pipe(new PNG()).on('parsed', function() {
-      floydSteinberg(this).pack().pipe(createWriteStream(ditheredImgPath));
-      resolve(ditheredImgPath);
+    createReadStream(path).pipe(new PNG()).on('parsed', function() {
+      floydSteinberg(this).pack().pipe(createWriteStream(path));
+      resolve(path);
     });
   });
 }
