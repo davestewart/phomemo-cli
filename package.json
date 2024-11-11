@@ -1,4 +1,14 @@
 {
+  "name": "cli-phomemo-printer",
+  "description": "",
+  "version": "1.0.0",
+  "author": "",
+  "type": "module",
+  "main": "src/index.js",
+  "scripts": {
+    "serve": "node src -p 4000",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
   "dependencies": {
     "@abandonware/noble": "^1.9.2-21",
     "@inquirer/prompts": "^2.2.0",
@@ -13,15 +23,5 @@
     "node-thermal-printer": "^4.2.1",
     "pngjs": "^7.0.0"
   },
-  "name": "cli-phomemo-printer",
-  "version": "1.0.0",
-  "main": "src/index.js",
-  "scripts": {
-    "serve": "node src -p 4000",
-    "test": "echo \"Error: no test specified\" && exit 1"
-  },
-  "type": "module",
-  "author": "",
-  "license": "ISC",
-  "description": ""
+  "license": "ISC"
 }
