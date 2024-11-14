@@ -2,8 +2,8 @@ import Fs, { existsSync, mkdirSync } from 'fs'
 import Path from 'path'
 import express from 'express'
 import multer from 'multer'
-import { print } from './print.js'
-import { mergeOptions } from './options.js'
+import { mergeOptions } from './services/options.js'
+import { print } from './services/print.js'
 
 // ---------------------------------------------------------------------------------------------------------------------
 // setup

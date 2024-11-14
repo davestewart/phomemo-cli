@@ -1,9 +1,9 @@
 import Fs from "fs"
 import { Command } from 'commander'
-import { getDeviceCharacteristicMenu } from './device.js'
+import { parseOptions } from './services/options.js'
+import { getDeviceCharacteristicMenu } from './services/device.js'
+import { print } from './services/print.js'
 import { serve } from './server.js'
-import { print } from './print.js'
-import { parseOptions } from './options.js'
 
 // ---------------------------------------------------------------------------------------------------------------------
 // setup
