@@ -2,7 +2,8 @@ import Fs, { existsSync, mkdirSync } from 'fs'
 import Path from 'path'
 import express from 'express'
 import multer from 'multer'
-import { parseSettings, print } from './print.js'
+import { print } from './print.js'
+import { mergeOptions } from './options.js'
 
 // ---------------------------------------------------------------------------------------------------------------------
 // setup
@@ -13,42 +14,50 @@ if (!existsSync(CACHE_DIR)) {
   mkdirSync(CACHE_DIR)
 }
 
+function sendError (res, message, status = 400) {
+  res.status(status).send({ error: message })
+}
+
 // ---------------------------------------------------------------------------------------------------------------------
 // server
 // ---------------------------------------------------------------------------------------------------------------------
 
-export function serve (port = 4000, characteristic, settings = {}) {
+export function serve (port = 4000, characteristic, options = {}) {
   // express
   const app = express()
 
-  // set up multer for file uploads
+  // configure uploads
   const storage = multer.memoryStorage() // store files in memory temporarily
   const upload = multer({ storage })
 
-  // define the /print endpoint
-  app.post('/print', upload.single('image'), (req, res) => {
+  /**
+   * Print submitted file
+   */
+  app.post('/print', upload.single('image'), async (req, res) => {
+    // check file upload
     if (!req.file) {
-      return res.status(400).send('No file uploaded.')
+      return sendError(res, 'No file uploaded')
     }
 
     // create a temporary file path
     const path = Path.join(CACHE_DIR, req.file.originalname.toLowerCase())
 
-    // save the file to the temp directory
-    Fs.writeFile(path, req.file.buffer, (err) => {
-      if (err) {
-        return res.status(500).send('Error saving file')
-      }
+    // cache file
+    try {
+      Fs.writeFileSync(path, req.file.buffer)
+    }
+    catch (err) {
+      return sendError(res, 'Error caching file')
+    }
 
-      // report
-      res.send('Printing!')
-
-      // print
-      if (typeof print === 'function') {
-        const { scale, dither } = parseSettings(req.query)
-        print(characteristic, path, scale || settings.scale, dither || settings.dither)
-      }
-    })
+    // print file
+    try {
+      const metadata = await print(characteristic, path, mergeOptions(options, req.query))
+      res.json(metadata)
+    }
+    catch (err) {
+      sendError(res, err.message)
+    }
   })
 
   // start the server
