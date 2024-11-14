@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Image Gallery</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel">
+  function App() {
+    // ---------------------------------------------------------------------------------------------------------------------
+    // state
+    // ---------------------------------------------------------------------------------------------------------------------
+
+    const [images, setImages] = React.useState([])
+    const [loading, setLoading] = React.useState(true)
+    const [error, setError] = React.useState(null)
+
+    React.useEffect(() => {
+      Api.load()
+    }, [])
+
+    // ---------------------------------------------------------------------------------------------------------------------
+    // api
+    // ---------------------------------------------------------------------------------------------------------------------
+
+    const Api = {
+      async load() {
+        fetch('/cache')
+          .then(response => response.json())
+          .then(data => {
+            setImages(data)
+            setLoading(false)
+          })
+          .catch(err => {
+            setError(err.message)
+            setLoading(false)
+          })
+      },
+
+      async print(name) {
+        const res = await fetch(`http://localhost:4000/print?name=${name}`)
+        if (res.status === 200) {
+          console.log(`Printing ${name}`)
+        }
+      },
+
+      async remove(name) {
+        const res = await fetch(`http://localhost:4000/remove?name=${name}`)
+        if (res.status === 200) {
+          const index = images.findIndex((image) => image.name === name)
+          if (index > -1) {
+            images.splice(index, 1)
+            setImages([...images])
+          }
+        }
+      },
+
+      async clear() {
+        const res = await fetch(`http://localhost:4000/clear?`)
+        console.log(await res.text())
+        setImages([])
+      }
+    }
+
+    // ---------------------------------------------------------------------------------------------------------------------
+    // components
+    // ---------------------------------------------------------------------------------------------------------------------
+
+    const UploadIcon = ({ className }) => (
+      <svg
+        className={className}
+        xmlns="http://www.w3.org/2000/svg"
+        width="24"
+        height="24"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+        <polyline points="17 8 12 3 7 8"/>
+        <line x1="12" y1="3" x2="12" y2="15"/>
+      </svg>
+    )
+
+    const ImageUploader = () => {
+      const [isDragging, setIsDragging] = React.useState(false)
+      const [status, setStatus] = React.useState('')
+      const fileInputRef = React.useRef(null)
+
+      const handleDrag = (e) => {
+        e.preventDefault()
+        e.stopPropagation()
+      }
+
+      const handleDragIn = (e) => {
+        e.preventDefault()
+        e.stopPropagation()
+        setIsDragging(true)
+      }
+
+      const handleDragOut = (e) => {
+        e.preventDefault()
+        e.stopPropagation()
+        setIsDragging(false)
+      }
+
+      const resetFileInput = () => {
+        if (fileInputRef.current) {
+          fileInputRef.current.value = ''
+        }
+      }
+
+      const handleFileUpload = async (file) => {
+        if (file && file.type.startsWith('image/')) {
+          const formData = new FormData()
+          formData.append('image', file)
+
+          try {
+            setStatus('Uploading...')
+            const response = await fetch('http://localhost:4000/print', {
+              method: 'POST',
+              body: formData,
+            })
+
+            const data = await response.json()
+            console.log('Server response:', data)
+            setStatus('Upload successful!')
+
+            // Reset after successful upload
+            setTimeout(() => {
+              setStatus('')
+              resetFileInput()
+              void Api.load()
+            }, 2000)
+          }
+          catch (error) {
+            console.error('Upload error:', error)
+            setStatus('Upload failed')
+
+            // Reset after error
+            setTimeout(() => {
+              setStatus('')
+              resetFileInput()
+            }, 2000)
+          }
+        }
+        else {
+          setStatus('Please select an image file')
+          setTimeout(() => {
+            setStatus('')
+            resetFileInput()
+          }, 2000)
+        }
+      }
+
+      const handleDrop = async (e) => {
+        e.preventDefault()
+        e.stopPropagation()
+        setIsDragging(false)
+
+        const files = [...e.dataTransfer.files]
+        if (files.length > 0) {
+          await handleFileUpload(files[0])
+        }
+      }
+
+      const handleClick = () => {
+        fileInputRef.current?.click()
+      }
+
+      const handleFileSelect = async (e) => {
+        const files = [...e.target.files]
+        if (files.length > 0) {
+          await handleFileUpload(files[0])
+        }
+      }
+
+      return (
+        <div
+          onClick={handleClick}
+          onDragEnter={handleDragIn}
+          onDragLeave={handleDragOut}
+          onDragOver={handleDrag}
+          onDrop={handleDrop}
+          className={`
+          h-full
+          flex flex-col items-center justify-center
+          transition-all duration-200 ease-in-out
+          cursor-pointer
+          ${isDragging
+            ? 'border-blue-500 bg-blue-50'
+            : 'border-gray-300 hover:border-gray-400 hover:bg-gray-50'
+          }
+        `}
+        >
+          <input
+            ref={fileInputRef}
+            type="file"
+            className="hidden"
+            accept="image/*"
+            onChange={handleFileSelect}
+          />
+
+          <div className="text-center px-4 py-6 h-64">
+            <UploadIcon className={`
+              w-24 h-24 mx-auto mb-4
+              ${isDragging ? 'text-blue-500' : 'text-gray-300'}
+          `}/>
+
+            <p className={`
+            text-lg font-medium mb-2
+            ${isDragging ? 'text-blue-600' : 'text-gray-700'}
+          `}>
+              {isDragging ? 'Drop image here' : 'Drag and drop an image to print'}
+            </p>
+
+            <p className="text-sm text-gray-500 mb-2">
+              or click to browse
+            </p>
+
+            {status && (
+              <div className={`
+              mt-4 py-2 px-3 rounded-lg text-sm
+              ${status.includes('failed')
+                ? 'bg-red-100 text-red-600'
+                : status.includes('success')
+                  ? 'bg-green-100 text-green-600'
+                  : 'bg-blue-100 text-blue-600'
+              }
+            `}>
+                {status}
+              </div>
+            )}
+          </div>
+        </div>
+      )
+    }
+
+    const ImageUpload = () => {
+      const [uploading, setUploading] = React.useState(false)
+      const [error, setError] = React.useState(null)
+      const [lastUploaded, setLastUploaded] = React.useState(null)
+
+      const onFileSelect = async (event) => {
+        const file = event.target.files?.[0]
+        if (!file) return
+
+        setUploading(true)
+        setError(null)
+
+        const formData = new FormData()
+        formData.append('image', file)
+
+        try {
+          const response = await fetch('/print?dither=1', {
+            method: 'POST',
+            body: formData,
+          })
+
+          if (!response.ok) {
+            throw new Error('Upload failed')
+          }
+
+          setLastUploaded(file.name)
+          event.target.value = ''
+          void Api.load()
+
+        } catch (err) {
+          setError('Failed to upload image: ' + err.message)
+        } finally {
+          setUploading(false)
+        }
+      }
+
+      return (
+        <div className="flex flex-col justify-center items-center w-full h-full p-4 space-y-4">
+          <div className="w-full max-w-md">
+            <label
+              htmlFor="file-upload"
+              className={`px-4 py-2 rounded border-2 border-dashed border-gray-300 text-center cursor-pointer block w-full
+            ${uploading ? 'bg-gray-100 cursor-not-allowed' : 'hover:border-blue-500'}`}
+            >
+              {uploading ? 'Uploading...' : 'Upload'}
+              <input
+                id="file-upload"
+                type="file"
+                accept="image/*"
+                onChange={onFileSelect}
+                disabled={uploading}
+                className="hidden"
+              />
+            </label>
+          </div>
+
+          {error && <div className="text-red-500">{error}</div>}
+          {lastUploaded && !error && (
+            <div className="text-sm text-green-600">
+              Successfully uploaded: {lastUploaded}
+            </div>
+          )}
+        </div>
+      )
+    }
+
+    const ImageGallery = () => {
+      return (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {images.map((image, index) => (
+            <div data-id="thumbnail" key={index} className="relative">
+              <ImageThumbnail image={image}/>
+            </div>
+          ))}
+        </div>
+      )
+    }
+
+    const ImageThumbnail = ({ image }) => {
+      const { path, name } = image
+      return (
+        <div
+          data-id="thumbnail_wrapper"
+          className="flex flex-col gap-2 p-3 rounded-lg outline outline-2 outline-dashed outline-gray-200 hover:outline-blue-500"
+          onClick={() => Api.print(name)}
+        >
+        <span
+          data-id="thumbnail__close"
+          className="absolute right-0 top-0 p-2 leading-none text-xl font-bold text-gray-200 hover:text-red-500 cursor-pointer"
+          onClick={(e) => {
+            e.stopPropagation()
+            Api.remove(name)
+          }}
+        >&times;</span>
+          <img
+            data-id="thumbnail__image"
+            src={path}
+            className="max-w-48 max-h-36 object-contain"
+            loading="lazy"
+          />
+          <p className="text-xs text-blue-500">{name}</p>
+        </div>
+      )
+    }
+
+    const ImageText = ({ image }) => {
+      const { name } = image
+      return (
+        <div
+          className="
+            group
+            flex items-center justify-between
+            -ml-4 py-2 pl-4 pr-2
+            rounded-lg leading-none
+            hover:bg-gray-50 cursor-pointer
+          "
+          onClick={() => Api.print(name)}
+        >
+          <span className="text-sm text-gray-700">{name}</span>
+          <span
+            className="
+              block h-full
+              px-3 py-1 -m-2
+              text-lg font-bold opacity-0
+              group-hover:opacity-100 text-gray-400 hover:text-red-500 hover:bg-gray-500/10
+              rounded-r-lg
+              cursor-pointer
+            "
+            onClick={(e) => {
+              e.stopPropagation()
+              Api.remove(name)
+            }}
+          >&times;</span>
+        </div>
+      )
+    }
+
+    const ImageList = () => {
+      return (
+        <div className="flex flex-col">
+          {images.map((image, index) => (
+            <div data-id="text" key={index} className="relative">
+              <ImageText image={image}/>
+            </div>
+          ))}
+        </div>
+      )
+    }
+
+    const ImageManager = () => {
+      return (
+        <div className="flex flex-col h-full">
+          <ImageList />
+        </div>
+      )
+    }
+
+    if (loading) {
+      return (
+        <div className="flex items-center justify-center min-h-screen">
+          <p className="text-xl">Loading images...</p>
+        </div>
+      )
+    }
+
+    if (error) {
+      return (
+        <div className="flex items-center justify-center min-h-screen">
+          <p className="text-xl text-red-500">Error loading images: {error}</p>
+        </div>
+      )
+    }
+
+    return (
+      <div className="flex h-screen">
+        <div className="w-2/3 border-r">
+          <ImageUploader />
+        </div>
+        {images.length > 0 && (
+          <div className="w-1/3 p-8 overflow-y-auto">
+            <ImageManager />
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  ReactDOM.render(<App/>, document.getElementById('root'))
+</script>
+</body>
+</html>
