@@ -6,7 +6,7 @@
   "type": "module",
   "main": "src/index.js",
   "scripts": {
-    "serve": "node src --port 4000 --cache",
+    "serve": "node src --port 4000",
     "serve:cache": "node src --port 4000 --cache",
     "serve:client": "node src --port 4000 --cache --debug --no-device",
     "serve:dev": "node src --port 4000 --cache --debug --device 'M02 Pro'",
