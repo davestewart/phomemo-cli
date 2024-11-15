@@ -6,21 +6,47 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
   <script src="https://cdn.tailwindcss.com"></script>
+  <style type="text/css">
+    @keyframes fadeIn {
+      from {
+        opacity: 0;
+        transform: translateY(20px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    @keyframes fadeOut {
+      from {
+        opacity: 1;
+        transform: translateY(0);
+      }
+      to {
+        opacity: 0;
+        transform: translateY(-20px);
+      }
+    }
+  </style>
 </head>
 <body>
 <div id="root"></div>
 
 <script type="text/babel">
-  function App() {
+  function App () {
+
+    const { useState, useRef, useEffect } = React
+
     // ---------------------------------------------------------------------------------------------------------------------
     // state
     // ---------------------------------------------------------------------------------------------------------------------
 
-    const [images, setImages] = React.useState([])
-    const [loading, setLoading] = React.useState(true)
-    const [error, setError] = React.useState(null)
+    const [images, setImages] = useState([])
+    const [loading, setLoading] = useState(true)
+    const [error, setError] = useState(null)
 
-    React.useEffect(() => {
+    useEffect(() => {
       Api.load()
     }, [])
 
@@ -29,7 +55,7 @@
     // ---------------------------------------------------------------------------------------------------------------------
 
     const Api = {
-      async load() {
+      async load () {
         fetch('/cache')
           .then(response => response.json())
           .then(data => {
@@ -42,29 +68,66 @@
           })
       },
 
-      async print(name) {
+      async print (name) {
         const res = await fetch(`http://localhost:4000/print?name=${name}`)
         if (res.status === 200) {
-          console.log(`Printing ${name}`)
+          notify(`Printing ${name}`, 'success')
         }
       },
 
-      async remove(name) {
+      async remove (name) {
         const res = await fetch(`http://localhost:4000/remove?name=${name}`)
         if (res.status === 200) {
           const index = images.findIndex((image) => image.name === name)
           if (index > -1) {
             images.splice(index, 1)
             setImages([...images])
+            notify(`Removed ${name}`, 'info')
           }
         }
       },
 
-      async clear() {
+      async clear () {
         const res = await fetch(`http://localhost:4000/clear?`)
-        console.log(await res.text())
         setImages([])
-      }
+        notify(await res.text(), 'info')
+      },
+    }
+
+    // ---------------------------------------------------------------------------------------------------------------------
+    // notifications
+    // ---------------------------------------------------------------------------------------------------------------------
+
+    const [notifications, setNotifications] = useState([])
+
+    const notify = (message, status = 'info') => {
+      const id = Date.now()
+      setNotifications(prev => [...prev, { id, message, status }])
+      // Just set the timeout right here when we create the notification
+      setTimeout(() => {
+        setNotifications(prev => prev.filter(n => n.id !== id))
+      }, 3000)
+    }
+
+    const NotificationContainer = () => {
+      return (
+        <div className="fixed bottom-4 right-6 flex flex-col-reverse items-end">
+          {notifications.map(({ id, message, status }) => (
+            <div key={id}>
+              <div
+                className={`
+                  inline-block py-2 px-3 mb-2 rounded-lg text-sm animate-fade-in
+                  ${status === 'success' ? 'bg-green-100 text-green-600' : ''}
+                  ${status === 'error' ? 'bg-red-100 text-red-600' : ''}
+                  ${status === 'info' ? 'bg-blue-100 text-blue-600' : ''}
+                `}
+              >
+                {message}
+              </div>
+            </div>
+          ))}
+        </div>
+      )
     }
 
     // ---------------------------------------------------------------------------------------------------------------------
@@ -91,9 +154,10 @@
     )
 
     const ImageUploader = () => {
-      const [isDragging, setIsDragging] = React.useState(false)
-      const [status, setStatus] = React.useState('')
-      const fileInputRef = React.useRef(null)
+      const [isDragging, setIsDragging] = useState(false)
+      const fileInputRef = useRef(null)
+
+      console.log({ fileInputRef })
 
       const handleDrag = (e) => {
         e.preventDefault()
@@ -124,7 +188,6 @@
           formData.append('image', file)
 
           try {
-            setStatus('Uploading...')
             const response = await fetch('http://localhost:4000/print', {
               method: 'POST',
               body: formData,
@@ -132,32 +195,19 @@
 
             const data = await response.json()
             console.log('Server response:', data)
-            setStatus('Upload successful!')
-
-            // Reset after successful upload
-            setTimeout(() => {
-              setStatus('')
-              resetFileInput()
-              void Api.load()
-            }, 2000)
+            notify(`Printing ${file.name}`, 'success')
+            void Api.load()
           }
           catch (error) {
-            console.error('Upload error:', error)
-            setStatus('Upload failed')
-
             // Reset after error
-            setTimeout(() => {
-              setStatus('')
-              resetFileInput()
-            }, 2000)
+            notify(error.message, 'error')
+          }
+          finally {
+            resetFileInput()
           }
         }
         else {
-          setStatus('Please select an image file')
-          setTimeout(() => {
-            setStatus('')
-            resetFileInput()
-          }, 2000)
+          notify('Please select an image file')
         }
       }
 
@@ -172,12 +222,15 @@
         }
       }
 
-      const handleClick = () => {
-        fileInputRef.current?.click()
+      const handleClick = (e) => {
+        if (e.target !== fileInputRef.current) {
+          fileInputRef.current?.click()
+        }
       }
 
       const handleFileSelect = async (e) => {
         const files = [...e.target.files]
+        console.log('Handle File Select', files)
         if (files.length > 0) {
           await handleFileUpload(files[0])
         }
@@ -191,124 +244,48 @@
           onDragOver={handleDrag}
           onDrop={handleDrop}
           className={`
-          h-full
-          flex flex-col items-center justify-center
-          transition-all duration-200 ease-in-out
+          h-full flex flex-col items-center justify-center
           cursor-pointer
+          group
           ${isDragging
-            ? 'border-blue-500 bg-blue-50'
-            : 'border-gray-300 hover:border-gray-400 hover:bg-gray-50'
+            ? 'bg-blue-50'
+            : 'hover:bg-gray-50'
           }
         `}
         >
           <input
             ref={fileInputRef}
             type="file"
-            className="hidden"
             accept="image/*"
-            onChange={handleFileSelect}
+            className="hidden"
+            onInputCapture={handleFileSelect}
           />
 
-          <div className="text-center px-4 py-6 h-64">
-            <UploadIcon className={`
-              w-24 h-24 mx-auto mb-4
-              ${isDragging ? 'text-blue-500' : 'text-gray-300'}
-          `}/>
-
-            <p className={`
-            text-lg font-medium mb-2
-            ${isDragging ? 'text-blue-600' : 'text-gray-700'}
+          <div className={`
+            px-4 py-6 h-64
+            pointer-events-none
+            text-center
+            ${isDragging ? 'text-blue-700' : 'text-gray-500 group-hover:text-gray-900'}
           `}>
+            <UploadIcon className={`
+              w-24 h-24 mx-auto mb-4 opacity-30
+            `}/>
+
+            <p className="text-lg font-medium mb-2">
               {isDragging ? 'Drop image here' : 'Drag and drop an image to print'}
             </p>
 
-            <p className="text-sm text-gray-500 mb-2">
+            <p className="mb-2 text-sm opacity-75">
               or click to browse
             </p>
-
-            {status && (
-              <div className={`
-              mt-4 py-2 px-3 rounded-lg text-sm
-              ${status.includes('failed')
-                ? 'bg-red-100 text-red-600'
-                : status.includes('success')
-                  ? 'bg-green-100 text-green-600'
-                  : 'bg-blue-100 text-blue-600'
-              }
-            `}>
-                {status}
-              </div>
-            )}
           </div>
         </div>
       )
     }
 
-    const ImageUpload = () => {
-      const [uploading, setUploading] = React.useState(false)
-      const [error, setError] = React.useState(null)
-      const [lastUploaded, setLastUploaded] = React.useState(null)
-
-      const onFileSelect = async (event) => {
-        const file = event.target.files?.[0]
-        if (!file) return
-
-        setUploading(true)
-        setError(null)
-
-        const formData = new FormData()
-        formData.append('image', file)
-
-        try {
-          const response = await fetch('/print?dither=1', {
-            method: 'POST',
-            body: formData,
-          })
-
-          if (!response.ok) {
-            throw new Error('Upload failed')
-          }
-
-          setLastUploaded(file.name)
-          event.target.value = ''
-          void Api.load()
-
-        } catch (err) {
-          setError('Failed to upload image: ' + err.message)
-        } finally {
-          setUploading(false)
-        }
-      }
-
-      return (
-        <div className="flex flex-col justify-center items-center w-full h-full p-4 space-y-4">
-          <div className="w-full max-w-md">
-            <label
-              htmlFor="file-upload"
-              className={`px-4 py-2 rounded border-2 border-dashed border-gray-300 text-center cursor-pointer block w-full
-            ${uploading ? 'bg-gray-100 cursor-not-allowed' : 'hover:border-blue-500'}`}
-            >
-              {uploading ? 'Uploading...' : 'Upload'}
-              <input
-                id="file-upload"
-                type="file"
-                accept="image/*"
-                onChange={onFileSelect}
-                disabled={uploading}
-                className="hidden"
-              />
-            </label>
-          </div>
-
-          {error && <div className="text-red-500">{error}</div>}
-          {lastUploaded && !error && (
-            <div className="text-sm text-green-600">
-              Successfully uploaded: {lastUploaded}
-            </div>
-          )}
-        </div>
-      )
-    }
+    // ---------------------------------------------------------------------------------------------------------------------
+    // image gallery
+    // ---------------------------------------------------------------------------------------------------------------------
 
     const ImageGallery = () => {
       return (
@@ -349,6 +326,10 @@
       )
     }
 
+    // ---------------------------------------------------------------------------------------------------------------------
+    // image list
+    // ---------------------------------------------------------------------------------------------------------------------
+
     const ImageText = ({ image }) => {
       const { name } = image
       return (
@@ -356,13 +337,13 @@
           className="
             group
             flex items-center justify-between
-            -ml-4 py-2 pl-4 pr-2
+            py-2 pl-4 pr-2
             rounded-lg leading-none
             hover:bg-gray-50 cursor-pointer
           "
           onClick={() => Api.print(name)}
         >
-          <span className="text-sm text-gray-700">{name}</span>
+          <span className="text-sm text-gray-600 group-hover:text-gray-900">{name}</span>
           <span
             className="
               block h-full
@@ -383,7 +364,7 @@
 
     const ImageList = () => {
       return (
-        <div className="flex flex-col">
+        <div className="flex flex-col px-4 py-6 overflow-y-auto">
           {images.map((image, index) => (
             <div data-id="text" key={index} className="relative">
               <ImageText image={image}/>
@@ -396,10 +377,14 @@
     const ImageManager = () => {
       return (
         <div className="flex flex-col h-full">
-          <ImageList />
+          <ImageList/>
         </div>
       )
     }
+
+    // ---------------------------------------------------------------------------------------------------------------------
+    // app
+    // ---------------------------------------------------------------------------------------------------------------------
 
     if (loading) {
       return (
@@ -418,15 +403,18 @@
     }
 
     return (
-      <div className="flex h-screen">
-        <div className="w-2/3 border-r">
-          <ImageUploader />
-        </div>
-        {images.length > 0 && (
-          <div className="w-1/3 p-8 overflow-y-auto">
-            <ImageManager />
+      <div>
+        <div className="flex h-screen">
+          <div className="flex-1 border-r">
+            <ImageUploader/>
           </div>
-        )}
+          {images.length > 0 && (
+            <div className="w-96 overflow-y-auto">
+              <ImageManager/>
+            </div>
+          )}
+        </div>
+        <NotificationContainer/>
       </div>
     )
   }
