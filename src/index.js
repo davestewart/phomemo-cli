@@ -1,7 +1,7 @@
 import { Command } from 'commander'
 import { parseOptions } from './services/options.js'
-import { print } from './services/print.js'
 import { getDevice, getDeviceMenu } from './services/device.js'
+import { printer as print } from './printer.js'
 import { serve } from './server.js'
 import { log } from './services/utils.js'
 
@@ -58,15 +58,6 @@ if (port) {
 
 // otherwise, print supplied or test image
 else {
-  let target = file
-
-  // copy test image if no file supplied
-  if (!file) {
-    const source = './res/assets/burger.png'
-    target = source.replace('assets', 'cache')
-    Fs.copyFileSync(source, target)
-  }
-
-  // print
-  void print(characteristic, target, options)
+  void print(characteristic, file, options)
 }
+
