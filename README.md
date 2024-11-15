@@ -1,4 +1,4 @@
-## cli-phomemo-printer
+# Phomemo CLI
 
 > A Node JS package to enabling printing to a Phomemo printer
 
@@ -34,18 +34,74 @@ npm install
 
 ## Usage
 
-Phomemo CLI is a Node package which you start by running it from the terminal, e.g:
+Start the script by running it from the terminal.
 
-```
-node src --file /path/to/file.png --dither
-```
+Depending on what parameters you pass, it will run in one of two modes:
 
-Depending on what command and arguments you pass, it will run in one of two modes:
-
-- [printer](#printer-mode) – where you print files one at a time from the terminal
 - [server](#server-mode) – where you print files by selecting them from a web browser
+- [printer](#printer-mode) – where you print files one at a time from the terminal
 
-Running in server mode is generally the most user-friendly experience, as you can drag and drop images from your desktop.
+For example:
+
+```bash
+# print an image
+node src --file /path/to/file.png --dither
+
+# start the web server
+node src --port 4000 --cache
+```
+
+Running in server mode is generally the most user-friendly experience, as you can drag and drop images from your desktop, re-print files, delete files, etc.
+
+## Server Mode
+
+![server](res/assets/server.png)
+
+### Basic usage
+
+To start the web server, pass the `--port` parameter with a port:
+
+```bash
+# simple ui
+node src --port 4000
+
+# file management ui
+node src --port 4000 --cache
+```
+
+Alternatively, you can run one of the preconfigured NPM scripts:
+
+```bash
+# simple
+npm run serve
+
+# file management
+npm run serve:cache
+```
+
+You can then visit `http://localhost:4000` in your browser to get started printing images.
+
+### Developers
+
+The print server is an Express app with just enough endpoints available to get the job done.
+
+You can `POST` images from other applications to print directly to the printer.
+
+You may pass CLI arguments as query strings, for example:
+
+```
+POST http://localhost:4000/print?scale=478&dither=1
+```
+
+Note that any CLI parameters and query string values will be combined in the final print function, so the following would print a dithered image at 50%:
+
+```
+// bash
+node src --port 4000 --dither
+
+// HTTP POST
+http://localhost:4000/print?scale=50
+```
 
 ## Printer Mode
 
@@ -63,48 +119,6 @@ You can pass additional commands like so:
 
 ```bash
 node src --file path/to/file.jpg --dither --debug
-```
-
-## Server Mode
-
-![server](res/assets/server.png)
-
-### basic usage
-
-To start the web server, pass the `--port` parameter with a port:
-
-```bash
-node src -port 4000
-```
-
-Alternatively, you can run one of the preconfigured NPM scripts:
-
-```bash
-npm run serve
-```
-
-You can then visit `http://localhost:4000` in your browser for a user-friendly way to print images.
-
-### Developers
-
-The print server is an Express app with just enough endpoints available to get the job done.
-
-Note that you can `POST` from any application to print images to the printer.
-
-You may pass CLI arguments as query strings, for example:
-
-```
-POST http://localhost:4000/print?scale=478&dither=1
-```
-
-Note that any CLI parameters and query string values will be combined in the final print function, so the following would print a dithered image at 50%:
-
-```
-// bash
-node src --port 4000 --dither
-
-// HTTP POST
-http://localhost:4000/print?scale=50
 ```
 
 ## CLI Reference
